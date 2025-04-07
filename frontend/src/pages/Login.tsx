@@ -1,0 +1,183 @@
+import React, { useState, useEffect } from 'react';
+import { useDispatch, useSelector } from 'react-redux';
+import { Link, useNavigate } from 'react-router-dom';
+import { login, clearError } from '../slices/authSlice';
+import { RootState, AppDispatch } from '../store';
+
+const Login = () => {
+  const [formData, setFormData] = useState({
+    email: '',
+    password: '',
+    rememberMe: false
+  });
+  const [formErrors, setFormErrors] = useState<{email?: string, password?: string}>({});
+
+  const dispatch = useDispatch<AppDispatch>();
+  const navigate = useNavigate();
+  const { loading, error, isAuthenticated } = useSelector(
+    (state: RootState) => state.auth
+  );
+
+  useEffect(() => {
+    // If user is already authenticated, redirect to home page
+    if (isAuthenticated) {
+      navigate('/');
+    }
+
+    return () => {
+      // Clear any errors when component unmounts
+      dispatch(clearError());
+    };
+  }, [dispatch, isAuthenticated, navigate]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value, type, checked } = e.target;
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+    
+    // Clear error when user starts typing
+    if (formErrors[name as keyof typeof formErrors]) {
+      setFormErrors(prev => ({
+        ...prev,
+        [name]: undefined
+      }));
+    }
+  };
+
+  const validateForm = () => {
+    const newErrors: {email?: string, password?: string} = {};
+    
+    if (!formData.email) {
+      newErrors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
+      newErrors.email = 'Email is invalid';
+    }
+    
+    if (!formData.password) {
+      newErrors.password = 'Password is required';
+    }
+    
+    setFormErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (validateForm()) {
+      dispatch(login({ 
+        email: formData.email, 
+        password: formData.password 
+      }));
+    }
+  };
+
+  return (
+    <div className="container mx-auto px-4 py-12">
+      <div className="max-w-md mx-auto">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold">Login to Your Account</h1>
+          <p className="text-gray-600 mt-2">
+            Enter your credentials to access your account
+          </p>
+        </div>
+        
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8">
+          {error && (
+            <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-6">
+              {error}
+            </div>
+          )}
+          
+          <form onSubmit={handleSubmit}>
+            <div className="mb-6">
+              <label htmlFor="email" className="block text-sm font-medium mb-2">
+                Email Address
+              </label>
+              <input
+                type="email"
+                id="email"
+                name="email"
+                value={formData.email}
+                onChange={handleChange}
+                className={`input ${formErrors.email ? 'border-red-500' : ''}`}
+                placeholder="your@email.com"
+              />
+              {formErrors.email && (
+                <p className="text-red-500 text-sm mt-1">{formErrors.email}</p>
+              )}
+            </div>
+            
+            <div className="mb-6">
+              <div className="flex items-center justify-between mb-2">
+                <label htmlFor="password" className="block text-sm font-medium">
+                  Password
+                </label>
+                <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-500">
+                  Forgot password?
+                </Link>
+              </div>
+              <input
+                type="password"
+                id="password"
+                name="password"
+                value={formData.password}
+                onChange={handleChange}
+                className={`input ${formErrors.password ? 'border-red-500' : ''}`}
+                placeholder="••••••••"
+              />
+              {formErrors.password && (
+                <p className="text-red-500 text-sm mt-1">{formErrors.password}</p>
+              )}
+            </div>
+            
+            <div className="flex items-center mb-6">
+              <input
+                type="checkbox"
+                id="rememberMe"
+                name="rememberMe"
+                checked={formData.rememberMe}
+                onChange={handleChange}
+                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+              />
+              <label htmlFor="rememberMe" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+                Remember me
+              </label>
+            </div>
+            
+            <button
+              type="submit"
+              className="btn btn-primary w-full flex justify-center items-center"
+              disabled={loading}
+            >
+              {loading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Logging in...
+                </>
+              ) : (
+                'Login'
+              )}
+            </button>
+          </form>
+          
+          <div className="mt-6 text-center">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Don't have an account?{' '}
+              <Link to="/register" className="text-blue-600 hover:text-blue-500 font-medium">
+                Register now
+              </Link>
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Login;
