@@ -1,180 +1,182 @@
 import React, { useState, useEffect } from 'react';
-import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
+import { useDispatch, useSelector } from 'react-redux';
 import { login, clearError } from '../slices/authSlice';
 import { RootState, AppDispatch } from '../store';
+import { toast } from 'react-toastify';
+
+interface FormData {
+  email: string;
+  password: string;
+}
+
+interface FormErrors {
+  email?: string;
+  password?: string;
+}
 
 const Login = () => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     email: '',
-    password: '',
-    rememberMe: false
+    password: ''
   });
-  const [formErrors, setFormErrors] = useState<{email?: string, password?: string}>({});
 
-  const dispatch = useDispatch<AppDispatch>();
+  const [formErrors, setFormErrors] = useState<FormErrors>({});
+
+  const { email, password } = formData;
   const navigate = useNavigate();
-  const { loading, error, isAuthenticated } = useSelector(
-    (state: RootState) => state.auth
-  );
+  const dispatch = useDispatch<AppDispatch>();
+
+  const { user, loading, error } = useSelector((state: RootState) => state.auth);
 
   useEffect(() => {
-    // If user is already authenticated, redirect to home page
-    if (isAuthenticated) {
-      navigate('/');
+    if (error) {
+      toast.error(error);
+      dispatch(clearError());
     }
 
-    return () => {
-      // Clear any errors when component unmounts
-      dispatch(clearError());
-    };
-  }, [dispatch, isAuthenticated, navigate]);
+    if (user) {
+      navigate('/');
+    }
+  }, [error, user, navigate, dispatch]);
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value, type, checked } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value
-    }));
+  const validateForm = (): boolean => {
+    const errors: FormErrors = {};
     
+    if (!email.trim()) {
+      errors.email = 'Email is required';
+    } else if (!/\S+@\S+\.\S+/.test(email)) {
+      errors.email = 'Email is invalid';
+    }
+    
+    if (!password) {
+      errors.password = 'Password is required';
+    }
+    
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  const onChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prevState) => ({
+      ...prevState,
+      [name]: value
+    }));
     // Clear error when user starts typing
-    if (formErrors[name as keyof typeof formErrors]) {
-      setFormErrors(prev => ({
+    if (formErrors[name as keyof FormErrors]) {
+      setFormErrors((prev) => ({
         ...prev,
         [name]: undefined
       }));
     }
   };
 
-  const validateForm = () => {
-    const newErrors: {email?: string, password?: string} = {};
-    
-    if (!formData.email) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
-    }
-    
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    }
-    
-    setFormErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
-  const handleSubmit = (e: React.FormEvent) => {
+  const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     if (validateForm()) {
-      dispatch(login({ 
-        email: formData.email, 
-        password: formData.password 
-      }));
+      const userData = {
+        email,
+        password
+      };
+      dispatch(login(userData));
     }
   };
 
   return (
-    <div className="container mx-auto px-4 py-12">
-      <div className="max-w-md mx-auto">
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold">Login to Your Account</h1>
-          <p className="text-gray-600 mt-2">
-            Enter your credentials to access your account
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+      <div className="max-w-md w-full space-y-8">
+        <div>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+            Sign in to your account
+          </h2>
+          <p className="mt-2 text-center text-sm text-gray-600">
+            Or{' '}
+            <Link
+              to="/register"
+              className="font-medium text-indigo-600 hover:text-indigo-500"
+            >
+              create a new account
+            </Link>
           </p>
         </div>
-        
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-8">
-          {error && (
-            <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-6">
-              {error}
-            </div>
-          )}
-          
-          <form onSubmit={handleSubmit}>
-            <div className="mb-6">
-              <label htmlFor="email" className="block text-sm font-medium mb-2">
-                Email Address
+        <form className="mt-8 space-y-6" onSubmit={onSubmit}>
+          <div className="rounded-md shadow-sm -space-y-px">
+            <div>
+              <label htmlFor="email" className="sr-only">
+                Email address
               </label>
               <input
-                type="email"
                 id="email"
                 name="email"
-                value={formData.email}
-                onChange={handleChange}
-                className={`input ${formErrors.email ? 'border-red-500' : ''}`}
-                placeholder="your@email.com"
+                type="email"
+                autoComplete="email"
+                required
+                className={`appearance-none rounded-none relative block w-full px-3 py-2 border ${
+                  formErrors.email ? 'border-red-500' : 'border-gray-300'
+                } placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm`}
+                placeholder="Email address"
+                value={email}
+                onChange={onChange}
               />
               {formErrors.email && (
-                <p className="text-red-500 text-sm mt-1">{formErrors.email}</p>
+                <p className="text-red-500 text-xs mt-1">{formErrors.email}</p>
               )}
             </div>
-            
-            <div className="mb-6">
-              <div className="flex items-center justify-between mb-2">
-                <label htmlFor="password" className="block text-sm font-medium">
-                  Password
-                </label>
-                <Link to="/forgot-password" className="text-sm text-blue-600 hover:text-blue-500">
-                  Forgot password?
-                </Link>
-              </div>
+            <div>
+              <label htmlFor="password" className="sr-only">
+                Password
+              </label>
               <input
-                type="password"
                 id="password"
                 name="password"
-                value={formData.password}
-                onChange={handleChange}
-                className={`input ${formErrors.password ? 'border-red-500' : ''}`}
-                placeholder="••••••••"
+                type="password"
+                autoComplete="current-password"
+                required
+                className={`appearance-none rounded-none relative block w-full px-3 py-2 border ${
+                  formErrors.password ? 'border-red-500' : 'border-gray-300'
+                } placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm`}
+                placeholder="Password"
+                value={password}
+                onChange={onChange}
               />
               {formErrors.password && (
-                <p className="text-red-500 text-sm mt-1">{formErrors.password}</p>
+                <p className="text-red-500 text-xs mt-1">{formErrors.password}</p>
               )}
             </div>
-            
-            <div className="flex items-center mb-6">
+          </div>
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
               <input
+                id="remember-me"
+                name="remember-me"
                 type="checkbox"
-                id="rememberMe"
-                name="rememberMe"
-                checked={formData.rememberMe}
-                onChange={handleChange}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
               />
-              <label htmlFor="rememberMe" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
+              <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-900">
                 Remember me
               </label>
             </div>
-            
+
+            <div className="text-sm">
+              <Link to="/forgot-password" className="font-medium text-indigo-600 hover:text-indigo-500">
+                Forgot your password?
+              </Link>
+            </div>
+          </div>
+
+          <div>
             <button
               type="submit"
-              className="btn btn-primary w-full flex justify-center items-center"
               disabled={loading}
+              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50"
             >
-              {loading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Logging in...
-                </>
-              ) : (
-                'Login'
-              )}
+              {loading ? 'Signing in...' : 'Sign in'}
             </button>
-          </form>
-          
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              Don't have an account?{' '}
-              <Link to="/register" className="text-blue-600 hover:text-blue-500 font-medium">
-                Register now
-              </Link>
-            </p>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );

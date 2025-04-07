@@ -1,10 +1,8 @@
-import { useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   addToCart, 
-  removeFromCart, 
-  updateCartPrices 
+  removeFromCart
 } from '../slices/cartSlice';
 import { RootState, AppDispatch } from '../store';
 
@@ -15,11 +13,6 @@ const Cart = () => {
   const { cartItems, itemsPrice, shippingPrice, taxPrice, totalPrice } = useSelector(
     (state: RootState) => state.cart
   );
-  
-  useEffect(() => {
-    // Calculate prices when component mounts
-    dispatch(updateCartPrices());
-  }, [dispatch]);
   
   const handleQuantityChange = (productId: string, quantity: number) => {
     // Find the product in cart

@@ -6,13 +6,28 @@ import { getProducts } from '../slices/productSlice';
 import { AppDispatch, RootState } from '../store';
 import Loader from '../components/ui/Loader';
 
+// Define types
+interface FilterState {
+  category: string;
+  priceRange: string;
+  sortBy: string;
+  minPrice: string;
+  maxPrice: string;
+  featured: boolean;
+  collectible: boolean;
+}
+
 const ProductList = () => {
   const dispatch = useDispatch<AppDispatch>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [filter, setFilter] = useState({
+  const [filter, setFilter] = useState<FilterState>({
     category: searchParams.get('category') || '',
-    priceRange: '',
-    sortBy: 'newest'
+    priceRange: searchParams.get('priceRange') || '',
+    sortBy: searchParams.get('sortBy') || 'newest',
+    minPrice: searchParams.get('minPrice') || '',
+    maxPrice: searchParams.get('maxPrice') || '',
+    featured: searchParams.get('featured') === 'true',
+    collectible: searchParams.get('collectible') === 'true'
   });
 
   const { products, loading, error, page, pages } = useSelector(
@@ -20,22 +35,33 @@ const ProductList = () => {
   );
 
   useEffect(() => {
-    const params: any = {};
+    const params: Record<string, string> = {};
     if (filter.category) params.category = filter.category;
-    dispatch(getProducts(params));
-  }, [dispatch, filter.category]);
-
-  const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const { name, value } = e.target;
-    setFilter(prev => ({ ...prev, [name]: value }));
+    if (filter.priceRange) params.priceRange = filter.priceRange;
+    if (filter.sortBy) params.sortBy = filter.sortBy;
+    if (filter.minPrice) params.minPrice = filter.minPrice;
+    if (filter.maxPrice) params.maxPrice = filter.maxPrice;
+    if (filter.featured) params.featured = 'true';
+    if (filter.collectible) params.collectible = 'true';
     
-    if (name === 'category') {
-      if (value) {
-        setSearchParams({ category: value });
-      } else {
-        setSearchParams({});
-      }
-    }
+    setSearchParams(params);
+    dispatch(getProducts(params));
+  }, [dispatch, filter]);
+
+  const handleFilterChange = (e: React.ChangeEvent<HTMLSelectElement | HTMLInputElement>) => {
+    const { name, value, type } = e.target;
+    setFilter(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value
+    }));
+  };
+
+  const handlePriceRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFilter(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   const handleAddToCart = (product: any) => {
@@ -51,38 +77,14 @@ const ProductList = () => {
     );
   };
 
-  // Apply price range filter
-  let filteredProducts = [...products];
-  if (filter.priceRange) {
-    const [min, max] = filter.priceRange.split('-').map(Number);
-    filteredProducts = filteredProducts.filter(
-      (product) => product.price >= min && (max ? product.price <= max : true)
-    );
-  }
-
-  // Apply sorting
-  switch (filter.sortBy) {
-    case 'priceAsc':
-      filteredProducts.sort((a, b) => a.price - b.price);
-      break;
-    case 'priceDesc':
-      filteredProducts.sort((a, b) => b.price - a.price);
-      break;
-    case 'rating':
-      filteredProducts.sort((a, b) => b.rating - a.rating);
-      break;
-    default:
-      // 'newest' - do nothing as our products are already sorted by newest
-      break;
-  }
-
   return (
     <div className="container mx-auto px-4 py-12">
       <h1 className="section-title text-4xl mb-12">Our Collection</h1>
 
       {/* Filters */}
       <div className="bg-gray-100 dark:bg-gray-800 p-6 rounded-lg shadow-md mb-12 border border-gray-200 dark:border-gray-700">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {/* Category Filter */}
           <div>
             <label htmlFor="category" className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
               Category
@@ -101,24 +103,33 @@ const ProductList = () => {
               <option value="accessory">Accessories</option>
             </select>
           </div>
+
+          {/* Price Range Filter */}
           <div>
-            <label htmlFor="priceRange" className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
+            <label className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
               Price Range
             </label>
-            <select
-              id="priceRange"
-              name="priceRange"
-              value={filter.priceRange}
-              onChange={handleFilterChange}
-              className="input w-full"
-            >
-              <option value="">All Prices</option>
-              <option value="0-100">$0 - $100</option>
-              <option value="100-300">$100 - $300</option>
-              <option value="300-500">$300 - $500</option>
-              <option value="500-10000">$500+</option>
-            </select>
+            <div className="flex space-x-2">
+              <input
+                type="number"
+                name="minPrice"
+                value={filter.minPrice}
+                onChange={handlePriceRangeChange}
+                placeholder="Min"
+                className="input w-1/2"
+              />
+              <input
+                type="number"
+                name="maxPrice"
+                value={filter.maxPrice}
+                onChange={handlePriceRangeChange}
+                placeholder="Max"
+                className="input w-1/2"
+              />
+            </div>
           </div>
+
+          {/* Sort By */}
           <div>
             <label htmlFor="sortBy" className="block text-sm font-medium mb-2 text-gray-700 dark:text-gray-300">
               Sort By
@@ -134,7 +145,33 @@ const ProductList = () => {
               <option value="priceAsc">Price: Low to High</option>
               <option value="priceDesc">Price: High to Low</option>
               <option value="rating">Rating</option>
+              <option value="nameAsc">Name: A to Z</option>
+              <option value="nameDesc">Name: Z to A</option>
             </select>
+          </div>
+
+          {/* Special Filters */}
+          <div className="flex flex-col justify-end space-y-2">
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                name="featured"
+                checked={filter.featured}
+                onChange={handleFilterChange}
+                className="rounded text-primary focus:ring-primary"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">Featured Only</span>
+            </label>
+            <label className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                name="collectible"
+                checked={filter.collectible}
+                onChange={handleFilterChange}
+                className="rounded text-primary focus:ring-primary"
+              />
+              <span className="text-sm text-gray-700 dark:text-gray-300">Collectible Only</span>
+            </label>
           </div>
         </div>
       </div>
@@ -144,14 +181,14 @@ const ProductList = () => {
         <Loader />
       ) : error ? (
         <div className="bg-red-100 text-red-700 p-4 rounded-lg mb-6">{error}</div>
-      ) : filteredProducts.length === 0 ? (
+      ) : products.length === 0 ? (
         <div className="text-center py-12">
           <h3 className="text-xl font-medium">No products found</h3>
           <p className="text-gray-600 mt-2">Try changing your filter options</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
-          {filteredProducts.map((product) => (
+          {products.map((product) => (
             <div key={product._id} className="card group">
               <Link to={`/products/${product.slug}`} className="block relative">
                 <div className="relative overflow-hidden">
@@ -166,8 +203,18 @@ const ProductList = () => {
                       <p className="text-gray-500">Product Image</p>
                     )}
                   </div>
-                  <div className="absolute top-2 right-2">
-                    <span className="bg-primary/80 backdrop-blur-sm text-white text-xs uppercase tracking-wider px-2 py-1 rounded">
+                  <div className="absolute top-2 right-2 flex flex-col space-y-2">
+                    {product.isFeatured && (
+                      <span className="bg-primary/80 backdrop-blur-sm text-white text-xs uppercase tracking-wider px-2 py-1 rounded">
+                        Featured
+                      </span>
+                    )}
+                    {product.isCollectible && (
+                      <span className="bg-secondary/80 backdrop-blur-sm text-white text-xs uppercase tracking-wider px-2 py-1 rounded">
+                        Collectible
+                      </span>
+                    )}
+                    <span className="bg-gray-800/80 backdrop-blur-sm text-white text-xs uppercase tracking-wider px-2 py-1 rounded">
                       {product.category}
                     </span>
                   </div>
@@ -196,7 +243,7 @@ const ProductList = () => {
                     <button 
                       className="btn btn-secondary"
                       onClick={(e) => {
-                        e.preventDefault();  // Prevent navigation when clicking the button
+                        e.preventDefault();
                         handleAddToCart(product);
                       }}
                     >
@@ -218,7 +265,7 @@ const ProductList = () => {
               className="px-3 py-1 rounded border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
               onClick={() => {
                 if (page > 1) {
-                  dispatch(getProducts({ category: filter.category, pageNumber: page - 1 }));
+                  dispatch(getProducts({ ...filter, pageNumber: page - 1 }));
                 }
               }}
               disabled={page <= 1}
@@ -233,7 +280,7 @@ const ProductList = () => {
                     ? 'bg-primary text-white'
                     : 'border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800'
                 }`}
-                onClick={() => dispatch(getProducts({ category: filter.category, pageNumber: x + 1 }))}
+                onClick={() => dispatch(getProducts({ ...filter, pageNumber: x + 1 }))}
               >
                 {x + 1}
               </button>
@@ -242,7 +289,7 @@ const ProductList = () => {
               className="px-3 py-1 rounded border border-gray-300 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 disabled:opacity-50"
               onClick={() => {
                 if (page < pages) {
-                  dispatch(getProducts({ category: filter.category, pageNumber: page + 1 }));
+                  dispatch(getProducts({ ...filter, pageNumber: page + 1 }));
                 }
               }}
               disabled={page >= pages}

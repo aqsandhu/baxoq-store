@@ -1,15 +1,17 @@
-const express = require('express');
-const router = express.Router();
-const { protect, admin } = require('../middleware/authMiddleware');
-const { 
+import express from 'express';
+import { protect, admin } from '../middleware/authMiddleware.js';
+import { 
   registerUser, 
   loginUser, 
+  logoutUser,
   getUserProfile, 
   updateUserProfile, 
   getUsers, 
   deleteUser 
-} = require('../controllers/userController');
-const { check } = require('express-validator');
+} from '../controllers/authController.js';
+import { check } from 'express-validator';
+
+const router = express.Router();
 
 // @route   POST /api/users/register
 // @desc    Register a new user
@@ -29,15 +31,18 @@ router.post(
 // @access  Public
 router.post('/login', loginUser);
 
+// @route   POST /api/users/logout
+// @desc    Logout user
+// @access  Private
+router.post('/logout', logoutUser);
+
 // @route   GET /api/users/profile
 // @desc    Get user profile
 // @access  Private
-router.get('/profile', protect, getUserProfile);
-
-// @route   PUT /api/users/profile
-// @desc    Update user profile
-// @access  Private
-router.put('/profile', protect, updateUserProfile);
+router
+  .route('/profile')
+  .get(protect, getUserProfile)
+  .put(protect, updateUserProfile);
 
 // @route   GET /api/users
 // @desc    Get all users
@@ -49,4 +54,4 @@ router.get('/', protect, admin, getUsers);
 // @access  Private/Admin
 router.delete('/:id', protect, admin, deleteUser);
 
-module.exports = router;
+export default router;

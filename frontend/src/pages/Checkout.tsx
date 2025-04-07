@@ -3,8 +3,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { 
   saveShippingAddress, 
-  savePaymentMethod,
-  updateCartPrices 
+  savePaymentMethod
 } from '../slices/cartSlice';
 import { createOrder } from '../slices/orderSlice';
 import { RootState, AppDispatch } from '../store';
@@ -348,9 +347,6 @@ const Checkout = () => {
     if (cartItems.length === 0) {
       navigate('/cart');
     }
-    
-    // Calculate prices
-    dispatch(updateCartPrices());
     
     // Redirect to order page after successful order creation
     if (success && order) {

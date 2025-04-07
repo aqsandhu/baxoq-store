@@ -9,6 +9,13 @@
     "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
   },
   "devDependencies": {
+    "@types/node": "^22.14.0",
     "concurrently": "^8.2.2"
+  },
+  "dependencies": {
+    "@fortawesome/fontawesome-free": "^6.7.2",
+    "@types/react-toastify": "^4.0.2",
+    "framer-motion": "^12.6.3",
+    "react-toastify": "^11.0.5"
   }
 }

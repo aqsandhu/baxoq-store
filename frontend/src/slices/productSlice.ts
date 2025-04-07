@@ -1,7 +1,17 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import productService from '../services/productService';
+import axios from 'axios';
 
 // Define types
+interface Review {
+  _id: string;
+  name: string;
+  rating: number;
+  comment: string;
+  user: string;
+  createdAt: string;
+}
+
 interface Product {
   _id: string;
   name: string;
@@ -16,14 +26,17 @@ interface Product {
   rating: number;
   numReviews: number;
   featured: boolean;
+  isFeatured: boolean;
+  isCollectible: boolean;
   videoUrl?: string;
-  reviews: Array<{
-    name: string;
-    rating: number;
-    comment: string;
-    user: string;
-    createdAt: string;
-  }>;
+  reviews: Review[];
+  relatedProducts: Product[];
+  specifications?: {
+    bladeLength?: string;
+    overallLength?: string;
+    weight?: string;
+    material?: string;
+  };
 }
 
 interface ProductsState {
@@ -67,13 +80,15 @@ export const getProducts = createAsyncThunk(
 );
 
 export const getProductDetails = createAsyncThunk(
-  'products/getById',
+  'products/getProductDetails',
   async (id: string, { rejectWithValue }) => {
     try {
-      return await productService.getProductById(id);
+      const { data } = await axios.get(`/api/products/${id}`);
+      return data;
     } catch (error: any) {
-      const message = error.response?.data?.message || error.message || 'Failed to fetch product details';
-      return rejectWithValue(message);
+      return rejectWithValue(
+        error.response?.data?.message || 'Error getting product details'
+      );
     }
   }
 );
@@ -205,13 +220,18 @@ export const deleteProduct = createAsyncThunk(
 );
 
 export const createProductReview = createAsyncThunk(
-  'products/createReview',
-  async ({ productId, review }: { productId: string; review: { rating: number; comment: string } }, { rejectWithValue }) => {
+  'products/createProductReview',
+  async (
+    { productId, review }: { productId: string; review: { rating: number; comment: string } },
+    { rejectWithValue }
+  ) => {
     try {
-      return await productService.createProductReview(productId, review);
+      const { data } = await axios.post(`/api/products/${productId}/reviews`, review);
+      return data;
     } catch (error: any) {
-      const message = error.response?.data?.message || error.message || 'Failed to create review';
-      return rejectWithValue(message);
+      return rejectWithValue(
+        error.response?.data?.message || 'Error creating review'
+      );
     }
   }
 );
@@ -253,9 +273,10 @@ const productSlice = createSlice({
         state.loading = true;
         state.error = null;
       })
-      .addCase(getProductDetails.fulfilled, (state, action: PayloadAction<Product>) => {
+      .addCase(getProductDetails.fulfilled, (state, action) => {
         state.loading = false;
         state.product = action.payload;
+        state.success = true;
       })
       .addCase(getProductDetails.rejected, (state, action) => {
         state.loading = false;

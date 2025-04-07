@@ -1,271 +1,304 @@
 const Product = require('../models/productModel');
+const asyncHandler = require('express-async-handler');
 const { validationResult } = require('express-validator');
 
-// @desc    Get all products
+// @desc    Fetch all products with filtering & pagination
 // @route   GET /api/products
 // @access  Public
-const getProducts = async (req, res) => {
-  try {
-    const pageSize = 10;
-    const page = Number(req.query.pageNumber) || 1;
-    
-    const keyword = req.query.keyword
-      ? {
-          name: {
-            $regex: req.query.keyword,
-            $options: 'i',
-          },
-        }
-      : {};
-    
-    const category = req.query.category ? { category: req.query.category } : {};
-    
-    const count = await Product.countDocuments({ ...keyword, ...category });
-    const products = await Product.find({ ...keyword, ...category })
-      .limit(pageSize)
-      .skip(pageSize * (page - 1))
-      .sort({ createdAt: -1 });
-    
-    res.json({
-      products,
-      page,
-      pages: Math.ceil(count / pageSize),
-      totalProducts: count,
-    });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
+const getProducts = asyncHandler(async (req, res) => {
+  const pageSize = 10;
+  const page = Number(req.query.pageNumber) || 1;
+  
+  // Build filter object
+  const filter = {};
+  
+  // Keyword search
+  if (req.query.keyword) {
+    filter.name = {
+      $regex: req.query.keyword,
+      $options: 'i'
+    };
   }
-};
+  
+  // Category filter
+  if (req.query.category) {
+    filter.category = req.query.category;
+  }
+  
+  // Featured filter
+  if (req.query.featured === 'true') {
+    filter.isFeatured = true;
+  }
+  
+  // Collectible filter
+  if (req.query.collectible === 'true') {
+    filter.isCollectible = true;
+  }
+  
+  // Price range filter
+  if (req.query.minPrice || req.query.maxPrice) {
+    filter.price = {};
+    if (req.query.minPrice) filter.price.$gte = Number(req.query.minPrice);
+    if (req.query.maxPrice) filter.price.$lte = Number(req.query.maxPrice);
+  }
+  
+  // Get total count for pagination
+  const count = await Product.countDocuments(filter);
+  
+  // Build sort object
+  const sort = {};
+  if (req.query.sort) {
+    const sortFields = req.query.sort.split(',');
+    sortFields.forEach(field => {
+      const [key, value] = field.split(':');
+      sort[key] = value === 'desc' ? -1 : 1;
+    });
+  } else {
+    sort.createdAt = -1; // Default sort by newest
+  }
+  
+  const products = await Product.find(filter)
+    .sort(sort)
+    .limit(pageSize)
+    .skip(pageSize * (page - 1))
+    .populate('user', 'name email');
+  
+  res.json({
+    products,
+    page,
+    pages: Math.ceil(count / pageSize),
+    totalProducts: count
+  });
+});
 
-// @desc    Get single product by ID
+// @desc    Fetch single product by ID
 // @route   GET /api/products/:id
 // @access  Public
-const getProductById = async (req, res) => {
-  try {
-    const product = await Product.findById(req.params.id);
-    
-    if (product) {
-      res.json(product);
-    } else {
-      res.status(404).json({ message: 'Product not found' });
-    }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
+const getProductById = asyncHandler(async (req, res) => {
+  const product = await Product.findById(req.params.id).populate('user', 'name email');
+  
+  if (product) {
+    res.json(product);
+  } else {
+    res.status(404);
+    throw new Error('Product not found');
   }
-};
+});
 
-// @desc    Get single product by slug
+// @desc    Fetch single product by slug
 // @route   GET /api/products/slug/:slug
 // @access  Public
-const getProductBySlug = async (req, res) => {
-  try {
-    const product = await Product.findOne({ slug: req.params.slug });
-    
-    if (product) {
-      res.json(product);
-    } else {
-      res.status(404).json({ message: 'Product not found' });
-    }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
+const getProductBySlug = asyncHandler(async (req, res) => {
+  const product = await Product.findOne({ slug: req.params.slug }).populate('user', 'name email');
+  
+  if (product) {
+    res.json(product);
+  } else {
+    res.status(404);
+    throw new Error('Product not found');
   }
-};
+});
 
 // @desc    Create a product
 // @route   POST /api/products
 // @access  Private/Admin
-const createProduct = async (req, res) => {
+const createProduct = asyncHandler(async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    res.status(400);
+    throw new Error(errors.array()[0].msg);
   }
 
-  try {
-    const {
-      name,
-      category,
-      subCategory,
-      description,
-      price,
-      countInStock,
-      images,
-      details,
-      isFeatured,
-      isCollectible,
-      metaTitle,
-      metaDescription,
-      metaKeywords,
-    } = req.body;
+  const {
+    name,
+    category,
+    subCategory,
+    description,
+    price,
+    countInStock,
+    images,
+    details,
+    isFeatured,
+    isCollectible,
+    metaTitle,
+    metaDescription,
+    metaKeywords,
+    videoUrl
+  } = req.body;
 
-    const product = new Product({
-      user: req.user._id,
-      name,
-      category,
-      subCategory,
-      description,
-      price,
-      countInStock,
-      images: images || [],
-      details: details || {},
-      isFeatured: isFeatured || false,
-      isCollectible: isCollectible || false,
-      metaTitle: metaTitle || name,
-      metaDescription: metaDescription || description.substring(0, 160),
-      metaKeywords: metaKeywords || '',
-    });
-
-    const createdProduct = await product.save();
-    res.status(201).json(createdProduct);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
+  // Check if product with same name exists
+  const productExists = await Product.findOne({ name });
+  if (productExists) {
+    res.status(400);
+    throw new Error('Product with this name already exists');
   }
-};
+
+  const product = new Product({
+    user: req.user._id,
+    name,
+    category,
+    subCategory,
+    description,
+    price,
+    countInStock,
+    images: images || [],
+    details: details || {},
+    isFeatured: isFeatured || false,
+    isCollectible: isCollectible || false,
+    metaTitle: metaTitle || name,
+    metaDescription: metaDescription || description.substring(0, 160),
+    metaKeywords: metaKeywords || '',
+    videoUrl: videoUrl || ''
+  });
+
+  const createdProduct = await product.save();
+  res.status(201).json(createdProduct);
+});
 
 // @desc    Update a product
 // @route   PUT /api/products/:id
 // @access  Private/Admin
-const updateProduct = async (req, res) => {
+const updateProduct = asyncHandler(async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
+    res.status(400);
+    throw new Error(errors.array()[0].msg);
   }
 
-  try {
-    const {
-      name,
-      category,
-      subCategory,
-      description,
-      price,
-      countInStock,
-      images,
-      details,
-      isFeatured,
-      isCollectible,
-      metaTitle,
-      metaDescription,
-      metaKeywords,
-    } = req.body;
+  const {
+    name,
+    category,
+    subCategory,
+    description,
+    price,
+    countInStock,
+    images,
+    details,
+    isFeatured,
+    isCollectible,
+    metaTitle,
+    metaDescription,
+    metaKeywords,
+    videoUrl
+  } = req.body;
 
-    const product = await Product.findById(req.params.id);
+  const product = await Product.findById(req.params.id);
 
-    if (product) {
-      product.name = name || product.name;
-      product.category = category || product.category;
-      product.subCategory = subCategory || product.subCategory;
-      product.description = description || product.description;
-      product.price = price || product.price;
-      product.countInStock = countInStock || product.countInStock;
-      product.images = images || product.images;
-      product.details = details || product.details;
-      product.isFeatured = isFeatured !== undefined ? isFeatured : product.isFeatured;
-      product.isCollectible = isCollectible !== undefined ? isCollectible : product.isCollectible;
-      product.metaTitle = metaTitle || product.metaTitle;
-      product.metaDescription = metaDescription || product.metaDescription;
-      product.metaKeywords = metaKeywords || product.metaKeywords;
+  if (!product) {
+    res.status(404);
+    throw new Error('Product not found');
+  }
 
-      const updatedProduct = await product.save();
-      res.json(updatedProduct);
-    } else {
-      res.status(404).json({ message: 'Product not found' });
+  // Check if new name conflicts with existing product
+  if (name && name !== product.name) {
+    const productExists = await Product.findOne({ name });
+    if (productExists) {
+      res.status(400);
+      throw new Error('Product with this name already exists');
     }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
   }
-};
+
+  // Update product fields
+  product.name = name || product.name;
+  product.category = category || product.category;
+  product.subCategory = subCategory || product.subCategory;
+  product.description = description || product.description;
+  product.price = price || product.price;
+  product.countInStock = countInStock || product.countInStock;
+  product.images = images || product.images;
+  product.details = details || product.details;
+  product.isFeatured = isFeatured !== undefined ? isFeatured : product.isFeatured;
+  product.isCollectible = isCollectible !== undefined ? isCollectible : product.isCollectible;
+  product.metaTitle = metaTitle || product.metaTitle;
+  product.metaDescription = metaDescription || product.metaDescription;
+  product.metaKeywords = metaKeywords || product.metaKeywords;
+  product.videoUrl = videoUrl || product.videoUrl;
+
+  const updatedProduct = await product.save();
+  res.json(updatedProduct);
+});
 
 // @desc    Delete a product
 // @route   DELETE /api/products/:id
 // @access  Private/Admin
-const deleteProduct = async (req, res) => {
-  try {
-    const product = await Product.findById(req.params.id);
+const deleteProduct = asyncHandler(async (req, res) => {
+  const product = await Product.findById(req.params.id);
 
-    if (product) {
-      await product.deleteOne();
-      res.json({ message: 'Product removed' });
-    } else {
-      res.status(404).json({ message: 'Product not found' });
-    }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
+  if (!product) {
+    res.status(404);
+    throw new Error('Product not found');
   }
-};
+
+  await product.deleteOne();
+  res.json({ message: 'Product removed' });
+});
 
 // @desc    Create new review
 // @route   POST /api/products/:id/reviews
 // @access  Private
-const createProductReview = async (req, res) => {
+const createProductReview = asyncHandler(async (req, res) => {
   const { rating, comment } = req.body;
 
-  try {
-    const product = await Product.findById(req.params.id);
-
-    if (product) {
-      // Check if user already reviewed
-      const alreadyReviewed = product.reviews.find(
-        (r) => r.user.toString() === req.user._id.toString()
-      );
-
-      if (alreadyReviewed) {
-        return res.status(400).json({ message: 'Product already reviewed' });
-      }
-
-      const review = {
-        name: req.user.name,
-        rating: Number(rating),
-        comment,
-        user: req.user._id,
-      };
-
-      product.reviews.push(review);
-      product.numReviews = product.reviews.length;
-      product.rating =
-        product.reviews.reduce((acc, item) => item.rating + acc, 0) /
-        product.reviews.length;
-
-      await product.save();
-      res.status(201).json({ message: 'Review added' });
-    } else {
-      res.status(404).json({ message: 'Product not found' });
-    }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
+  if (!rating || !comment) {
+    res.status(400);
+    throw new Error('Please provide both rating and comment');
   }
-};
+
+  const product = await Product.findById(req.params.id);
+
+  if (!product) {
+    res.status(404);
+    throw new Error('Product not found');
+  }
+
+  // Check if user already reviewed
+  const alreadyReviewed = product.reviews.find(
+    (r) => r.user.toString() === req.user._id.toString()
+  );
+
+  if (alreadyReviewed) {
+    res.status(400);
+    throw new Error('Product already reviewed');
+  }
+
+  const review = {
+    name: req.user.name,
+    rating: Number(rating),
+    comment,
+    user: req.user._id,
+  };
+
+  product.reviews.push(review);
+  product.numReviews = product.reviews.length;
+  product.rating =
+    product.reviews.reduce((acc, item) => item.rating + acc, 0) /
+    product.reviews.length;
+
+  await product.save();
+  res.status(201).json({ message: 'Review added' });
+});
 
 // @desc    Get top rated products
 // @route   GET /api/products/top
 // @access  Public
-const getTopProducts = async (req, res) => {
-  try {
-    const products = await Product.find({}).sort({ rating: -1 }).limit(5);
-    res.json(products);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
-  }
-};
+const getTopProducts = asyncHandler(async (req, res) => {
+  const products = await Product.find({})
+    .sort({ rating: -1 })
+    .limit(5);
+
+  res.json(products);
+});
 
 // @desc    Get featured products
 // @route   GET /api/products/featured
 // @access  Public
-const getFeaturedProducts = async (req, res) => {
-  try {
-    const products = await Product.find({ isFeatured: true }).limit(8);
-    res.json(products);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server Error' });
-  }
-};
+const getFeaturedProducts = asyncHandler(async (req, res) => {
+  const products = await Product.find({ isFeatured: true })
+    .sort({ createdAt: -1 })
+    .limit(8);
+
+  res.json(products);
+});
 
 module.exports = {
   getProducts,
