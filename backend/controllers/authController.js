@@ -1,6 +1,6 @@
 import asyncHandler from 'express-async-handler';
 import User from '../models/userModel.js';
-import generateToken from '../utils/generateToken.js';
+import { generateTokens, verifyRefreshToken } from '../utils/tokenUtils.js';
 
 // @desc    Register a new user
 // @route   POST /api/users/register
@@ -22,13 +22,23 @@ const registerUser = asyncHandler(async (req, res) => {
     password
   });
 
+  const { accessToken, refreshToken } = generateTokens(user._id);
+  
+  // Set refresh token in HTTP-only cookie
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+  });
+
   if (user) {
-    generateToken(res, user._id);
     res.status(201).json({
       _id: user._id,
       name: user.name,
       email: user.email,
-      isAdmin: user.isAdmin
+      isAdmin: user.isAdmin,
+      accessToken
     });
   } else {
     res.status(400);
@@ -56,20 +66,62 @@ const loginUser = asyncHandler(async (req, res) => {
     throw new Error('Invalid email or password');
   }
 
-  generateToken(res, user._id);
+  const { accessToken, refreshToken } = generateTokens(user._id);
+  
+  // Set refresh token in HTTP-only cookie
+  res.cookie('refreshToken', refreshToken, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'strict',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+  });
+
   res.json({
     _id: user._id,
     name: user.name,
     email: user.email,
-    isAdmin: user.isAdmin
+    isAdmin: user.isAdmin,
+    accessToken
   });
+});
+
+// @desc    Refresh token
+// @route   POST /api/users/refresh
+// @access  Public
+const refreshToken = asyncHandler(async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+    if (!refreshToken) {
+      return res.status(401).json({ message: 'No refresh token provided' });
+    }
+
+    const decoded = await verifyRefreshToken(refreshToken);
+    const user = await User.findById(decoded.userId);
+    if (!user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+
+    const { accessToken, refreshToken: newRefreshToken } = generateTokens(user._id);
+    
+    // Set new refresh token in HTTP-only cookie
+    res.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    res.json({ accessToken });
+  } catch (error) {
+    res.status(401).json({ message: 'Invalid refresh token' });
+  }
 });
 
 // @desc    Logout user / clear cookie
 // @route   POST /api/users/logout
 // @access  Private
 const logoutUser = asyncHandler(async (req, res) => {
-  res.cookie('jwt', '', {
+  res.cookie('refreshToken', '', {
     httpOnly: true,
     expires: new Date(0)
   });
@@ -127,5 +179,6 @@ export {
   loginUser,
   logoutUser,
   getUserProfile,
-  updateUserProfile
+  updateUserProfile,
+  refreshToken
 }; 
